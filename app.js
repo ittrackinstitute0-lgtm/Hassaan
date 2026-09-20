@@ -5,12 +5,12 @@
 // --- Global Configuration & Default State ---
 const CONFIG = {
   defaultWhatsAppNumber: "15558675309", // Default merchant WhatsApp number (editable)
-  currencySymbol: "$",
-  salesTaxRate: 0.08, // 8% estimated tax
+  currencySymbol: localStorage.getItem("aw_currency_symbol") || "$",
+  salesTaxRate: parseFloat(localStorage.getItem("aw_tax_rate")) || 0.08, // 8% estimated tax
 };
 
 // --- Watch Catalog Database ---
-const PRODUCTS = [
+const DEFAULT_PRODUCTS = [
   {
     id: "ultra-2",
     title: "Apple Watch Ultra 2",
@@ -159,6 +159,50 @@ const PRODUCTS = [
     features: ["Pace guidance and audio-guided runs", "Ultra-breathable fluoroelastomer strap", "Always-on high contrast metrics"]
   }
 ];
+
+// --- Persistent Data Loaders & State ---
+function loadProductsData() {
+  try {
+    const saved = localStorage.getItem("aw_products");
+    if (saved) return JSON.parse(saved);
+  } catch (e) {
+    console.error("Error loading products", e);
+  }
+  return JSON.parse(JSON.stringify(DEFAULT_PRODUCTS));
+}
+
+function saveProductsData() {
+  localStorage.setItem("aw_products", JSON.stringify(PRODUCTS));
+  renderCatalog();
+  initStudio();
+}
+
+function loadOrdersData() {
+  try {
+    const saved = localStorage.getItem("aw_orders");
+    if (saved) return JSON.parse(saved);
+  } catch (e) {
+    console.error("Error loading orders", e);
+  }
+  return [];
+}
+
+function saveOrdersData() {
+  localStorage.setItem("aw_orders", JSON.stringify(ORDERS));
+  if (isAdminLoggedIn) {
+    renderAdminDashboard();
+    renderAdminOrdersTable();
+  }
+}
+
+function recordOrder(orderData) {
+  ORDERS.unshift(orderData);
+  saveOrdersData();
+}
+
+let PRODUCTS = loadProductsData();
+let ORDERS = loadOrdersData();
+let isAdminLoggedIn = false;
 
 // Color definitions for swatches and SVG renderer
 const COLOR_MAP = {
@@ -560,6 +604,20 @@ window.orderStudioWatchWhatsApp = function() {
   const finishName = (COLOR_MAP[State.studio.caseFinish] || {}).label || State.studio.caseFinish;
   const bandName = (COLOR_MAP[State.studio.bandId] || {}).label || State.studio.bandId;
 
+  const newOrder = {
+    orderId: `ord-${Date.now()}`,
+    orderRef: `AW-${Math.floor(100000 + Math.random() * 900000)}`,
+    dateStr: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+    customerName: "Studio Customer",
+    phone: "",
+    address: "",
+    notes: `Custom ${State.studio.caseSize} ${finishName} with ${bandName}`,
+    itemSummary: `1x Custom ${currentProduct.title} (${State.studio.caseSize})`,
+    total: State.studio.price,
+    status: "Pending"
+  };
+  recordOrder(newOrder);
+
   const msg = [
     `⌚ *CUSTOM APPLE WATCH ORDER INQUIRY*`,
     `━━━━━━━━━━━━━━━━━━━━━━━━━`,
@@ -786,13 +844,27 @@ window.quickBuyWhatsApp = function(productId) {
   const finishName = (COLOR_MAP[p.defaultFinish] || {}).label || p.defaultFinish;
   const bandName = (COLOR_MAP[p.defaultBand] || {}).label || p.defaultBand;
 
+  const newOrder = {
+    orderId: `ord-${Date.now()}`,
+    orderRef: `AW-${Math.floor(100000 + Math.random() * 900000)}`,
+    dateStr: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+    customerName: "Quick Buy Guest",
+    phone: "",
+    address: "",
+    notes: "Direct product order",
+    itemSummary: `1x ${p.title} (${p.caseSize})`,
+    total: Math.round(p.basePrice * (1 + CONFIG.salesTaxRate)),
+    status: "Pending"
+  };
+  recordOrder(newOrder);
+
   const msg = [
     `🛒 *DIRECT APPLE WATCH ORDER*`,
     `━━━━━━━━━━━━━━━━━━━━━━━━━`,
     `⌚ *Model:* ${p.title}`,
     `📏 *Case Size:* ${p.caseSize}`,
     `🎨 *Finish:* ${finishName}`,
-    `🎗️ *Band:* ${bandName}`,
+    `Ribbon *Band:* ${bandName}`,
     `💵 *Price:* ${CONFIG.currencySymbol}${p.basePrice}.00`,
     `📦 *Shipping:* Free Express Delivery`,
     `━━━━━━━━━━━━━━━━━━━━━━━━━`,
@@ -975,6 +1047,23 @@ window.submitWhatsAppCheckout = function(e) {
   const address = document.getElementById("checkout-address")?.value.trim() || "";
   const notes = document.getElementById("checkout-notes")?.value.trim() || "";
 
+  const subtotal = State.cart.reduce((sum, item) => sum + (item.price * item.quantity), 0);
+  const total = Math.round(subtotal * (1 + CONFIG.salesTaxRate));
+
+  const newOrder = {
+    orderId: `ord-${Date.now()}`,
+    orderRef: `AW-${Math.floor(100000 + Math.random() * 900000)}`,
+    dateStr: new Date().toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric', hour: '2-digit', minute: '2-digit' }),
+    customerName: name || "Cart Guest",
+    phone: phone,
+    address: address,
+    notes: notes,
+    itemSummary: State.cart.map(i => `${i.quantity}x ${i.title} (${i.caseSize})`).join(", "),
+    total: total,
+    status: "Pending"
+  };
+  recordOrder(newOrder);
+
   const finalMsg = buildWhatsAppCartOrderMessage({ name, phone, address, notes });
   openWhatsAppWithMessage(finalMsg);
 
@@ -983,6 +1072,427 @@ window.submitWhatsAppCheckout = function(e) {
   if (modal) modal.close();
 
   showToast("Opening WhatsApp with your order!", "toast-wa");
+};
+
+// ==========================================================================
+// Admin Panel Management & Controller Engine
+// ==========================================================================
+window.openAdminPanel = function() {
+  if (isAdminLoggedIn) {
+    const modal = document.getElementById("admin-panel-modal");
+    if (modal) {
+      renderAdminDashboard();
+      if (typeof modal.showModal === "function") modal.showModal();
+      else modal.setAttribute("open", "");
+    }
+  } else {
+    const loginModal = document.getElementById("admin-login-modal");
+    const err = document.getElementById("admin-login-error");
+    if (err) err.style.display = "none";
+    if (loginModal) {
+      if (typeof loginModal.showModal === "function") loginModal.showModal();
+      else loginModal.setAttribute("open", "");
+    }
+  }
+};
+
+window.submitAdminLogin = function(e) {
+  if (e) e.preventDefault();
+  const input = document.getElementById("admin-passcode-input");
+  const err = document.getElementById("admin-login-error");
+  const passcode = input ? input.value.trim() : "";
+
+  const storedPasscode = localStorage.getItem("aw_admin_passcode") || "admin123";
+  if (passcode === storedPasscode) {
+    isAdminLoggedIn = true;
+    if (err) err.style.display = "none";
+    document.getElementById("admin-login-modal")?.close();
+    showToast("Welcome to Admin Panel!", "toast-wa");
+    openAdminPanel();
+  } else {
+    if (err) err.style.display = "block";
+  }
+};
+
+window.logoutAdmin = function() {
+  isAdminLoggedIn = false;
+  document.getElementById("admin-panel-modal")?.close();
+  showToast("Logged out from Admin Panel");
+};
+
+window.switchAdminTab = function(tabName) {
+  document.querySelectorAll(".admin-tab-btn").forEach(btn => {
+    btn.classList.toggle("active", btn.dataset.tab === tabName);
+  });
+
+  document.querySelectorAll(".admin-tab-content").forEach(content => {
+    content.style.display = content.id === `admin-tab-${tabName}` ? "block" : "none";
+  });
+
+  if (tabName === "dashboard") renderAdminDashboard();
+  if (tabName === "products") renderAdminProductsTable();
+  if (tabName === "orders") renderAdminOrdersTable();
+  if (tabName === "settings") loadAdminSettings();
+};
+
+function renderAdminDashboard() {
+  const statsContainer = document.getElementById("admin-dashboard-stats");
+  const productsCountEl = document.getElementById("admin-products-count");
+  const ordersCountEl = document.getElementById("admin-orders-count");
+
+  if (productsCountEl) productsCountEl.textContent = PRODUCTS.length;
+  if (ordersCountEl) ordersCountEl.textContent = ORDERS.length;
+
+  const totalRevenue = ORDERS.reduce((sum, o) => sum + (o.total || 0), 0);
+  const pendingOrders = ORDERS.filter(o => o.status === "Pending").length;
+  const shippedOrders = ORDERS.filter(o => o.status === "Shipped" || o.status === "Delivered").length;
+
+  if (statsContainer) {
+    statsContainer.innerHTML = `
+      <div class="admin-stat-card">
+        <div class="stat-icon" style="background: rgba(41, 151, 255, 0.15); color: #2997ff;">💰</div>
+        <div>
+          <div class="stat-label">Total Revenue</div>
+          <div class="stat-value">${CONFIG.currencySymbol}${totalRevenue.toLocaleString()}</div>
+          <div class="stat-sub">From ${ORDERS.length} total orders</div>
+        </div>
+      </div>
+      <div class="admin-stat-card">
+        <div class="stat-icon" style="background: rgba(255, 159, 10, 0.15); color: #ff9f0a;">📦</div>
+        <div>
+          <div class="stat-label">Total Orders</div>
+          <div class="stat-value">${ORDERS.length}</div>
+          <div class="stat-sub">${pendingOrders} pending processing</div>
+        </div>
+      </div>
+      <div class="admin-stat-card">
+        <div class="stat-icon" style="background: rgba(48, 209, 88, 0.15); color: #30d158;">⌚</div>
+        <div>
+          <div class="stat-label">Active Models</div>
+          <div class="stat-value">${PRODUCTS.length}</div>
+          <div class="stat-sub">Across 5 collections</div>
+        </div>
+      </div>
+      <div class="admin-stat-card">
+        <div class="stat-icon" style="background: rgba(144, 85, 255, 0.15); color: #9055ff;">🚚</div>
+        <div>
+          <div class="stat-label">Shipped / Delivered</div>
+          <div class="stat-value">${shippedOrders}</div>
+          <div class="stat-sub">Fulfilled via WhatsApp</div>
+        </div>
+      </div>
+    `;
+  }
+
+  // Recent Orders Preview
+  const recentPreview = document.getElementById("admin-recent-orders-preview");
+  if (recentPreview) {
+    if (ORDERS.length === 0) {
+      recentPreview.innerHTML = `<div style="text-align: center; padding: 24px; color: var(--text-secondary);">No orders recorded yet. Place an order on the site to test order tracking!</div>`;
+    } else {
+      const recent = ORDERS.slice(0, 5);
+      recentPreview.innerHTML = `
+        <table class="admin-table">
+          <thead>
+            <tr>
+              <th>Ref</th>
+              <th>Customer</th>
+              <th>Items</th>
+              <th>Total</th>
+              <th>Status</th>
+            </tr>
+          </thead>
+          <tbody>
+            ${recent.map(o => `
+              <tr>
+                <td><strong>#${o.orderRef}</strong></td>
+                <td>${o.customerName || 'WhatsApp Guest'}</td>
+                <td>${o.itemSummary}</td>
+                <td><strong>${CONFIG.currencySymbol}${o.total}</strong></td>
+                <td><span class="status-badge status-${(o.status || 'pending').toLowerCase()}">${o.status || 'Pending'}</span></td>
+              </tr>
+            `).join('')}
+          </tbody>
+        </table>
+      `;
+    }
+  }
+}
+
+window.renderAdminProductsTable = function(query = "") {
+  const tbody = document.getElementById("admin-products-table-body");
+  if (!tbody) return;
+
+  const filtered = PRODUCTS.filter(p => {
+    if (!query) return true;
+    const q = query.toLowerCase();
+    return p.title.toLowerCase().includes(q) || p.collection.toLowerCase().includes(q);
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="6" style="text-align: center; padding: 30px; color: var(--text-secondary);">No watch models match query.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(p => `
+    <tr>
+      <td>
+        <div style="font-weight: 600;">${p.title}</div>
+        <div style="font-size: 0.75rem; color: var(--text-secondary);">${p.id}</div>
+      </td>
+      <td><span class="badge badge-blue">${p.collection.toUpperCase()}</span></td>
+      <td><strong>${CONFIG.currencySymbol}${p.basePrice}</strong></td>
+      <td>${p.caseSize}</td>
+      <td>
+        <div style="display: flex; gap: 4px;">
+          ${(p.availableFinishes || []).map(f => `<span style="width: 12px; height: 12px; border-radius: 50%; background: ${f.hex}; border: 1px solid rgba(255,255,255,0.3);" title="${f.name}"></span>`).join("")}
+        </div>
+      </td>
+      <td>
+        <div style="display: flex; gap: 6px;">
+          <button class="btn btn-secondary btn-sm" onclick="editProduct('${p.id}')">Edit</button>
+          <button class="btn btn-secondary btn-sm" onclick="deleteProduct('${p.id}')" style="color: var(--accent-red); border-color: rgba(255, 69, 58, 0.3);">Delete</button>
+        </div>
+      </td>
+    </tr>
+  `).join("");
+};
+
+window.openAddProductModal = function() {
+  document.getElementById("prod-form-id").value = "";
+  document.getElementById("prod-form-title").value = "";
+  document.getElementById("prod-form-collection").value = "series10";
+  document.getElementById("prod-form-price").value = "429";
+  document.getElementById("prod-form-size").value = "46mm";
+  document.getElementById("prod-form-material").value = "Aluminum";
+  document.getElementById("prod-form-badge").value = "New Model";
+  document.getElementById("prod-form-badge-type").value = "badge-blue";
+  document.getElementById("prod-form-tagline").value = "";
+  document.getElementById("prod-form-specs").value = "";
+  document.getElementById("prod-form-features").value = "";
+
+  document.getElementById("product-form-title").textContent = "⌚ Add New Watch Model";
+  const modal = document.getElementById("product-form-modal");
+  if (modal) {
+    if (typeof modal.showModal === "function") modal.showModal();
+    else modal.setAttribute("open", "");
+  }
+};
+
+window.editProduct = function(productId) {
+  const p = PRODUCTS.find(prod => prod.id === productId);
+  if (!p) return;
+
+  document.getElementById("prod-form-id").value = p.id;
+  document.getElementById("prod-form-title").value = p.title;
+  document.getElementById("prod-form-collection").value = p.collection;
+  document.getElementById("prod-form-price").value = p.basePrice;
+  document.getElementById("prod-form-size").value = p.caseSize;
+  document.getElementById("prod-form-material").value = p.caseMaterial || "Aluminum";
+  document.getElementById("prod-form-badge").value = p.badge || "";
+  document.getElementById("prod-form-badge-type").value = p.badgeType || "badge-blue";
+  document.getElementById("prod-form-tagline").value = p.tagline || "";
+  document.getElementById("prod-form-specs").value = p.specs || "";
+  document.getElementById("prod-form-features").value = (p.features || []).join(", ");
+
+  document.getElementById("product-form-title").textContent = "✏️ Edit Watch Model";
+  const modal = document.getElementById("product-form-modal");
+  if (modal) {
+    if (typeof modal.showModal === "function") modal.showModal();
+    else modal.setAttribute("open", "");
+  }
+};
+
+window.saveProductForm = function(e) {
+  if (e) e.preventDefault();
+
+  const id = document.getElementById("prod-form-id").value.trim();
+  const title = document.getElementById("prod-form-title").value.trim();
+  const collection = document.getElementById("prod-form-collection").value;
+  const price = parseFloat(document.getElementById("prod-form-price").value) || 399;
+  const size = document.getElementById("prod-form-size").value.trim() || "46mm";
+  const material = document.getElementById("prod-form-material").value.trim() || "Aluminum";
+  const badge = document.getElementById("prod-form-badge").value.trim() || "Custom";
+  const badgeType = document.getElementById("prod-form-badge-type").value;
+  const tagline = document.getElementById("prod-form-tagline").value.trim();
+  const specs = document.getElementById("prod-form-specs").value.trim();
+  const featuresRaw = document.getElementById("prod-form-features").value;
+  const features = featuresRaw.split(",").map(f => f.trim()).filter(Boolean);
+
+  if (id) {
+    const existing = PRODUCTS.find(p => p.id === id);
+    if (existing) {
+      existing.title = title;
+      existing.collection = collection;
+      existing.basePrice = price;
+      existing.caseSize = size;
+      existing.caseMaterial = material;
+      existing.badge = badge;
+      existing.badgeType = badgeType;
+      existing.tagline = tagline;
+      existing.specs = specs;
+      if (features.length > 0) existing.features = features;
+    }
+  } else {
+    const newId = `custom-watch-${Date.now()}`;
+    const newProduct = {
+      id: newId,
+      title,
+      collection,
+      badge,
+      badgeType,
+      basePrice: price,
+      caseSize: size,
+      caseMaterial: material,
+      defaultFinish: "jet-black",
+      availableFinishes: [
+        { id: "jet-black", name: "Jet Black", hex: "#0d0d0f" },
+        { id: "silver", name: "Silver", hex: "#e5e5ea" }
+      ],
+      defaultBand: "sport-midnight",
+      availableBands: [
+        { id: "sport-midnight", name: "Sport Band Midnight", hex: "#1c2430", style: "Sport" }
+      ],
+      specs: specs || `${size} ${material} Case • Always-On Retina Display`,
+      tagline: tagline || "Custom engineered for excellence.",
+      features: features.length > 0 ? features : ["Custom Finish", "Retina Display", "50m Water Resistant"]
+    };
+    PRODUCTS.push(newProduct);
+  }
+
+  saveProductsData();
+  document.getElementById("product-form-modal")?.close();
+  showToast("Watch model saved successfully!", "toast-wa");
+  renderAdminProductsTable();
+};
+
+window.deleteProduct = function(productId) {
+  if (confirm("Are you sure you want to delete this watch model from the catalog?")) {
+    PRODUCTS = PRODUCTS.filter(p => p.id !== productId);
+    saveProductsData();
+    renderAdminProductsTable();
+    showToast("Product deleted from catalog");
+  }
+};
+
+window.resetProductsToDefault = function() {
+  if (confirm("Reset watch catalog to default factory products?")) {
+    PRODUCTS = JSON.parse(JSON.stringify(DEFAULT_PRODUCTS));
+    saveProductsData();
+    renderAdminProductsTable();
+    showToast("Catalog reset to default");
+  }
+};
+
+window.renderAdminOrdersTable = function(query = "") {
+  const tbody = document.getElementById("admin-orders-table-body");
+  if (!tbody) return;
+
+  const filtered = ORDERS.filter(o => {
+    if (!query) return true;
+    const q = query.toLowerCase();
+    return (o.orderRef && o.orderRef.toLowerCase().includes(q)) ||
+           (o.customerName && o.customerName.toLowerCase().includes(q)) ||
+           (o.phone && o.phone.toLowerCase().includes(q)) ||
+           (o.itemSummary && o.itemSummary.toLowerCase().includes(q));
+  });
+
+  if (filtered.length === 0) {
+    tbody.innerHTML = `<tr><td colspan="7" style="text-align: center; padding: 30px; color: var(--text-secondary);">No orders recorded yet. Place an order on WhatsApp to see logs here.</td></tr>`;
+    return;
+  }
+
+  tbody.innerHTML = filtered.map(o => `
+    <tr>
+      <td><strong>#${o.orderRef}</strong></td>
+      <td style="font-size: 0.8rem; color: var(--text-secondary);">${o.dateStr}</td>
+      <td>
+        <div style="font-weight: 600;">${o.customerName || 'WhatsApp Customer'}</div>
+        <div style="font-size: 0.75rem; color: var(--text-muted);">${o.phone || 'N/A'}</div>
+      </td>
+      <td style="font-size: 0.85rem; max-width: 280px;">${o.itemSummary}</td>
+      <td><strong>${CONFIG.currencySymbol}${o.total}</strong></td>
+      <td>
+        <select class="status-select status-${(o.status || 'Pending').toLowerCase()}" onchange="updateOrderStatus('${o.orderId}', this.value)">
+          <option value="Pending" ${o.status === 'Pending' ? 'selected' : ''}>Pending</option>
+          <option value="Confirmed" ${o.status === 'Confirmed' ? 'selected' : ''}>Confirmed</option>
+          <option value="Shipped" ${o.status === 'Shipped' ? 'selected' : ''}>Shipped</option>
+          <option value="Delivered" ${o.status === 'Delivered' ? 'selected' : ''}>Delivered</option>
+          <option value="Cancelled" ${o.status === 'Cancelled' ? 'selected' : ''}>Cancelled</option>
+        </select>
+      </td>
+      <td>
+        <button class="btn btn-secondary btn-sm" onclick="deleteOrder('${o.orderId}')" style="color: var(--accent-red); border-color: rgba(255, 69, 58, 0.3);">Delete</button>
+      </td>
+    </tr>
+  `).join("");
+};
+
+window.updateOrderStatus = function(orderId, newStatus) {
+  const o = ORDERS.find(ord => ord.orderId === orderId);
+  if (o) {
+    o.status = newStatus;
+    saveOrdersData();
+    showToast(`Order #${o.orderRef} status updated to ${newStatus}`, "toast-wa");
+  }
+};
+
+window.deleteOrder = function(orderId) {
+  if (confirm("Delete this order log?")) {
+    ORDERS = ORDERS.filter(o => o.orderId !== orderId);
+    saveOrdersData();
+    renderAdminOrdersTable();
+    showToast("Order removed from logs");
+  }
+};
+
+window.clearAllOrders = function() {
+  if (confirm("Are you sure you want to clear all order logs?")) {
+    ORDERS = [];
+    saveOrdersData();
+    renderAdminOrdersTable();
+    showToast("All order logs cleared");
+  }
+};
+
+function loadAdminSettings() {
+  const waInput = document.getElementById("admin-setting-wa");
+  const taxInput = document.getElementById("admin-setting-tax");
+  const currInput = document.getElementById("admin-setting-currency");
+
+  if (waInput) waInput.value = State.whatsAppNumber;
+  if (taxInput) taxInput.value = Math.round(CONFIG.salesTaxRate * 100);
+  if (currInput) currInput.value = CONFIG.currencySymbol;
+}
+
+window.saveAdminSettings = function(e) {
+  if (e) e.preventDefault();
+
+  const wa = document.getElementById("admin-setting-wa")?.value.trim();
+  const tax = parseFloat(document.getElementById("admin-setting-tax")?.value) || 8;
+  const currency = document.getElementById("admin-setting-currency")?.value.trim() || "$";
+  const passcode = document.getElementById("admin-setting-passcode")?.value.trim();
+
+  if (wa) {
+    State.whatsAppNumber = wa;
+    localStorage.setItem("aw_whatsapp_number", wa);
+    const footerNumEl = document.getElementById("footer-wa-num");
+    if (footerNumEl) footerNumEl.textContent = wa;
+  }
+
+  CONFIG.salesTaxRate = tax / 100;
+  CONFIG.currencySymbol = currency;
+  localStorage.setItem("aw_tax_rate", CONFIG.salesTaxRate);
+  localStorage.setItem("aw_currency_symbol", CONFIG.currencySymbol);
+
+  if (passcode) {
+    localStorage.setItem("aw_admin_passcode", passcode);
+    showToast("Admin passcode updated!", "toast-wa");
+  }
+
+  showToast("Store settings saved!", "toast-wa");
+  updateCartUI();
+  renderCatalog();
 };
 
 // ==========================================================================

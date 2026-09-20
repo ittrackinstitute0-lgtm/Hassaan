@@ -3,7 +3,7 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Apple Watch - Ultra 2, Series 10 & SE | Interactive Studio & WhatsApp Order</title>
+  <title>Apple Watch - Ultra 2, c:\Users\Admin\Desktop\kaifSeries 10 & SE | Interactive Studio & WhatsApp Order</title>
   <meta name="description" content="Explore Apple Watch Ultra 2, Series 10, and SE. Customize your case finishes and bands with our interactive studio, add to cart, and order directly on WhatsApp.">
   <link rel="stylesheet" href="styles.css">
   <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='%230071e3'><path d='M12 2C6.48 2 2 6.48 2 12s4.48 10 10 10 10-4.48 10-10S17.52 2 12 2zm0 18c-4.41 0-8-3.59-8-8s3.59-8 8-8 8 3.59 8 8-3.59 8-8 8zm.5-13H11v6l5.25 3.15.75-1.23-4.5-2.67z'/></svg>">
@@ -37,6 +37,17 @@
             <path d="M12.031 6.172c-3.181 0-5.767 2.586-5.768 5.766-.001 1.298.38 2.27 1.019 3.287l-.711 2.598 2.664-.698c.969.54 2.083.825 3.226.825 3.183 0 5.768-2.586 5.768-5.766 0-3.18-2.585-5.767-5.768-5.767zm3.398 8.163c-.144.405-.837.774-1.17.823-.312.045-.698.077-1.127-.061-.258-.084-.593-.207-1.023-.393-1.815-.785-3.003-2.618-3.094-2.739-.091-.121-.741-.986-.741-1.88 0-.895.467-1.336.633-1.516.166-.18.362-.226.483-.226.12 0 .241.002.347.007.113.005.263-.043.41.312.152.366.52 1.27.565 1.362.045.092.076.2.015.321-.06.121-.09.196-.18.302-.09.106-.19.237-.271.319-.09.091-.184.19-.079.371.106.181.472.778 1.011 1.258.694.619 1.28.81 1.461.901.181.091.287.076.393-.046.106-.121.453-.528.574-.709.12-.181.241-.151.407-.091.166.06 1.054.498 1.235.588.181.09.301.136.347.211.045.076.045.437-.099.842z"/>
           </svg>
           <span>WhatsApp Help</span>
+        </button>
+
+        <!-- Admin Panel Header Trigger -->
+        <button class="admin-header-btn" onclick="openAdminPanel()" title="Store Admin Dashboard">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <rect x="3" y="3" width="7" height="7" rx="1.5"/>
+            <rect x="14" y="3" width="7" height="7" rx="1.5"/>
+            <rect x="14" y="14" width="7" height="7" rx="1.5"/>
+            <rect x="3" y="14" width="7" height="7" rx="1.5"/>
+          </svg>
+          <span>Admin</span>
         </button>
 
         <!-- Cart Drawer Button -->
@@ -566,6 +577,266 @@
         <button type="submit" class="btn btn-primary" style="width: 100%; margin-top: 10px;">
           Save WhatsApp Number
         </button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ========================================================================
+       Admin Passcode Login Modal
+       ======================================================================== -->
+  <dialog id="admin-login-modal" class="custom-modal" style="max-width: 420px;" closedby="any" aria-labelledby="admin-login-title">
+    <div class="modal-header">
+      <h3 id="admin-login-title" class="modal-title">🔐 Store Admin Authentication</h3>
+      <button class="cart-close-btn" onclick="document.getElementById('admin-login-modal').close()">✕</button>
+    </div>
+    <form onsubmit="submitAdminLogin(event)">
+      <div class="modal-body">
+        <p style="font-size: 0.85rem; color: var(--text-secondary); margin-bottom: 16px;">
+          Enter the administrative passcode to access product inventory management, order logs, and store settings.
+        </p>
+        <div class="form-group">
+          <label class="form-label" for="admin-passcode-input">Admin Passcode</label>
+          <input type="password" id="admin-passcode-input" class="form-input" placeholder="Default: admin123" required autocomplete="current-password">
+          <span style="font-size: 0.75rem; color: var(--text-muted);">Default passcode: <code>admin123</code></span>
+        </div>
+        <div id="admin-login-error" style="color: var(--accent-red); font-size: 0.85rem; display: none; margin-bottom: 10px;">
+          ⚠️ Invalid admin passcode. Please try again.
+        </div>
+        <button type="submit" class="btn btn-primary" style="width: 100%;">
+          Login to Admin Portal →
+        </button>
+      </div>
+    </form>
+  </dialog>
+
+  <!-- ========================================================================
+       Admin Main Management Panel Modal
+       ======================================================================== -->
+  <dialog id="admin-panel-modal" class="custom-modal admin-panel-modal" style="max-width: 1080px; width: 95vw;" closedby="any" aria-labelledby="admin-panel-title">
+    <div class="modal-header admin-modal-header">
+      <div class="admin-header-title-group">
+        <h2 id="admin-panel-title" class="modal-title" style="font-size: 1.3rem;">⚡ Apple Store Administration Panel</h2>
+        <span class="badge badge-green">Authenticated</span>
+      </div>
+      <div style="display: flex; align-items: center; gap: 12px;">
+        <button class="btn btn-secondary btn-sm" onclick="logoutAdmin()" title="Logout Admin">Lock / Logout</button>
+        <button class="cart-close-btn" onclick="document.getElementById('admin-panel-modal').close()">✕</button>
+      </div>
+    </div>
+
+    <!-- Admin Navigation Tabs -->
+    <div class="admin-nav-tabs">
+      <button class="admin-tab-btn active" data-tab="dashboard" onclick="switchAdminTab('dashboard')">
+        📊 Overview & Stats
+      </button>
+      <button class="admin-tab-btn" data-tab="products" onclick="switchAdminTab('products')">
+        ⌚ Products Catalog (<span id="admin-products-count">0</span>)
+      </button>
+      <button class="admin-tab-btn" data-tab="orders" onclick="switchAdminTab('orders')">
+        📦 Order Logs (<span id="admin-orders-count">0</span>)
+      </button>
+      <button class="admin-tab-btn" data-tab="settings" onclick="switchAdminTab('settings')">
+        ⚙️ Store Settings
+      </button>
+    </div>
+
+    <div class="modal-body admin-panel-body">
+      <!-- Tab 1: Dashboard Overview -->
+      <div id="admin-tab-dashboard" class="admin-tab-content active">
+        <div class="admin-stats-grid" id="admin-dashboard-stats">
+          <!-- Rendered via app.js -->
+        </div>
+
+        <div style="margin-top: 30px;">
+          <div style="display: flex; align-items: center; justify-content: space-between; margin-bottom: 14px;">
+            <h3 style="font-size: 1.05rem; font-weight: 600;">Recent WhatsApp Orders</h3>
+            <button class="btn btn-secondary btn-sm" onclick="switchAdminTab('orders')">View All Orders →</button>
+          </div>
+          <div id="admin-recent-orders-preview" class="admin-table-wrapper">
+            <!-- Rendered via app.js -->
+          </div>
+        </div>
+      </div>
+
+      <!-- Tab 2: Product Catalog Management -->
+      <div id="admin-tab-products" class="admin-tab-content" style="display: none;">
+        <div class="admin-toolbar">
+          <div class="catalog-search-wrapper" style="max-width: 320px;">
+            <input type="text" id="admin-products-search" class="catalog-search-input" placeholder="Search title, collection..." oninput="renderAdminProductsTable(this.value)">
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <button class="btn btn-secondary btn-sm" onclick="resetProductsToDefault()">↺ Reset to Defaults</button>
+            <button class="btn btn-primary btn-sm" onclick="openAddProductModal()">+ Add New Watch Model</button>
+          </div>
+        </div>
+
+        <div class="admin-table-wrapper">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Model</th>
+                <th>Collection</th>
+                <th>Price</th>
+                <th>Case Size</th>
+                <th>Finishes</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="admin-products-table-body">
+              <!-- Rendered via app.js -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Tab 3: Order History Logs -->
+      <div id="admin-tab-orders" class="admin-tab-content" style="display: none;">
+        <div class="admin-toolbar">
+          <div class="catalog-search-wrapper" style="max-width: 320px;">
+            <input type="text" id="admin-orders-search" class="catalog-search-input" placeholder="Search Ref, Customer, Phone..." oninput="renderAdminOrdersTable(this.value)">
+          </div>
+          <div style="display: flex; gap: 10px;">
+            <button class="btn btn-secondary btn-sm" onclick="clearAllOrders()" style="color: var(--accent-red); border-color: rgba(255, 69, 58, 0.3);">🗑 Clear All Logs</button>
+          </div>
+        </div>
+
+        <div class="admin-table-wrapper">
+          <table class="admin-table">
+            <thead>
+              <tr>
+                <th>Order Ref</th>
+                <th>Date</th>
+                <th>Customer</th>
+                <th>Items & Detail</th>
+                <th>Total</th>
+                <th>Status</th>
+                <th>Actions</th>
+              </tr>
+            </thead>
+            <tbody id="admin-orders-table-body">
+              <!-- Rendered via app.js -->
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      <!-- Tab 4: Store & WhatsApp Configuration -->
+      <div id="admin-tab-settings" class="admin-tab-content" style="display: none;">
+        <form onsubmit="saveAdminSettings(event)" style="max-width: 600px;">
+          <h3 style="font-size: 1.1rem; font-weight: 600; margin-bottom: 16px;">Store Configuration</h3>
+          
+          <div class="form-group">
+            <label class="form-label" for="admin-setting-wa">Merchant WhatsApp Number</label>
+            <input type="text" id="admin-setting-wa" class="form-input" placeholder="e.g. 15558675309">
+            <span style="font-size: 0.75rem; color: var(--text-muted);">Digits only with country code (e.g. 15558675309)</span>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="admin-setting-tax">Estimated Sales Tax Rate (%)</label>
+            <input type="number" step="0.1" id="admin-setting-tax" class="form-input" placeholder="e.g. 8">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="admin-setting-currency">Currency Symbol</label>
+            <input type="text" id="admin-setting-currency" class="form-input" placeholder="e.g. $">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="admin-setting-passcode">Change Admin Passcode</label>
+            <input type="password" id="admin-setting-passcode" class="form-input" placeholder="Leave blank to keep current passcode">
+          </div>
+
+          <button type="submit" class="btn btn-primary" style="margin-top: 10px;">
+            Save Settings
+          </button>
+        </form>
+      </div>
+    </div>
+  </dialog>
+
+  <!-- ========================================================================
+       Add / Edit Product Modal Form
+       ======================================================================== -->
+  <dialog id="product-form-modal" class="custom-modal" style="max-width: 650px;" closedby="any" aria-labelledby="product-form-title">
+    <div class="modal-header">
+      <h3 id="product-form-title" class="modal-title">⌚ Add Watch Model</h3>
+      <button class="cart-close-btn" onclick="document.getElementById('product-form-modal').close()">✕</button>
+    </div>
+
+    <form onsubmit="saveProductForm(event)">
+      <input type="hidden" id="prod-form-id">
+
+      <div class="modal-body" style="max-height: 75vh; overflow-y: auto;">
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+          <div class="form-group">
+            <label class="form-label" for="prod-form-title">Watch Title</label>
+            <input type="text" id="prod-form-title" class="form-input" placeholder="e.g. Apple Watch Series 10 Ultra Edition" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="prod-form-collection">Collection</label>
+            <select id="prod-form-collection" class="form-input" style="background: var(--bg-tertiary);" required>
+              <option value="series10">Series 10</option>
+              <option value="ultra">Ultra 2</option>
+              <option value="se">Apple Watch SE</option>
+              <option value="hermes">Hermès</option>
+              <option value="nike">Nike Edition</option>
+            </select>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr 1fr; gap: 14px;">
+          <div class="form-group">
+            <label class="form-label" for="prod-form-price">Base Price ($)</label>
+            <input type="number" id="prod-form-price" class="form-input" placeholder="429" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="prod-form-size">Case Size</label>
+            <input type="text" id="prod-form-size" class="form-input" placeholder="e.g. 46mm" required>
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="prod-form-material">Case Material</label>
+            <input type="text" id="prod-form-material" class="form-input" placeholder="e.g. Titanium" required>
+          </div>
+        </div>
+
+        <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 14px;">
+          <div class="form-group">
+            <label class="form-label" for="prod-form-badge">Badge Label</label>
+            <input type="text" id="prod-form-badge" class="form-input" placeholder="e.g. New Generation">
+          </div>
+
+          <div class="form-group">
+            <label class="form-label" for="prod-form-badge-type">Badge Color</label>
+            <select id="prod-form-badge-type" class="form-input" style="background: var(--bg-tertiary);">
+              <option value="badge-blue">Blue</option>
+              <option value="badge-orange">Orange</option>
+              <option value="badge-green">Green</option>
+            </select>
+          </div>
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="prod-form-tagline">Tagline</label>
+          <input type="text" id="prod-form-tagline" class="form-input" placeholder="e.g. Thinstant classic. Biggest display.">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="prod-form-specs">Specifications Overview</label>
+          <input type="text" id="prod-form-specs" class="form-input" placeholder="e.g. 46mm • Wide-Angle OLED Display • Fast charging">
+        </div>
+
+        <div class="form-group">
+          <label class="form-label" for="prod-form-features">Key Innovations / Features (Comma separated)</label>
+          <textarea id="prod-form-features" class="form-textarea" rows="2" placeholder="ECG App, Sleep Apnea tracking, 50m Swimproof"></textarea>
+        </div>
+
+        <div style="display: flex; gap: 12px; margin-top: 20px;">
+          <button type="button" class="btn btn-secondary" style="flex: 1;" onclick="document.getElementById('product-form-modal').close()">Cancel</button>
+          <button type="submit" class="btn btn-primary" style="flex: 1;">Save Model</button>
+        </div>
       </div>
     </form>
   </dialog>
